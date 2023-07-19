@@ -288,7 +288,8 @@ epiblasterparallel <- function(geno,
   clusterExport(cl, c('getcor',
                       'ithChunk',
                       'WriteSnpPairs_sym',
-                      'WriteSnpPairs'))
+                      'WriteSnpPairs',
+                      'ZtoP'))
   
   # Turning future code into a process that can be parallelized
   apply_ztest <- function(i,j,nSNP,chunk,control,zthres){
@@ -329,7 +330,7 @@ epiblasterparallel <- function(geno,
   stopCluster(cl)
   print("epiblaster calculation is over!")
   print(date())
-  sprintf("Total time duration: %s", Sys.time() - start)
+  print(paste("Total time duration: ", Sys.time() - start))
 }
 
 
