@@ -165,6 +165,112 @@ episcan <- function(geno1,
 
 
 
+#' @description Genomic interaction analysis with EPIBLASTER using multiple cores.
+#' @title Scan pairwise epistasis using multiple cores
+#' @param geno1 a data.frame or matrix of the first genotype data. \code{big.matrix} object from \pkg{bigmemory} also works.
+#' The columns contain the information of variables and the rows contain the information of samples.
+#' @param pheno a vector (named or not). If not provided, the value of \code{geno2} will be used if it is a vector. The values is either case-control phenotype (0, 1) or quantitative phenotype.
+#' @param outfile output file name. Default is "episcan". 
+#' @param suffix suffix for output file. Default is ".txt". The final result will be stored in \code{outfile}\code{suffix}.
+#' @param zpthres is the significance threshold to select variant pairs for output. Default is 1e-6.
+#' @param chunksize the number of variants in each chunk.
+#' @param scale a logical value to define wheter the input data needs to be normalized. Default is TRUE which means, by default, 
+#' all the genotype data will be normalized and if the phetype is "quantitative", the phenotype will also be normalized. 
+#' @param ncores the number of cores for the process to allocate. Default is the result of the function \code{detectCores()}
+#' @references Kam-Thong, T., D. Czamara, K. Tsuda, K. Borgwardt, C. M. Lewis, A. Erhardt-Lehmann, B. Hemmer, et al. 2011. 
+#' "EPIBLASTER-Fast Exhaustive Two-Locus Epistasis Detection Strategy Using Graphical Processing Units." Journal Article. 
+#' European Journal of Human Genetics 19 (4): 465–71. https://doi.org/10.1038/ejhg.2010.196. 
+#' 
+#' Kam-Thong, T., B. Pütz, N. Karbalai, B. Müller-Myhsok, and K. Borgwardt. 2011. "Epistasis Detection on Quantitative 
+#' Phenotypes by Exhaustive Enumeration Using GPUs." Journal Article. Bioinformatics 27 (13): i214–21. https://doi.org/10.1093/bioinformatics/btr218.
+#' @return null
+#' @export
+#' @author Lance Hartman \email{lancehar@@seas.upenn.edu}
+#' 
+#' @examples
+#' # simulate some data
+#' set.seed(123)
+#' geno1 <- matrix(sample(0:2, size = 1000, replace = TRUE, prob = c(0.5, 0.3, 0.2)), 
+#' ncol = 10)
+#' dimnames(geno1) <- list(row = paste0("IND", 1:nrow(geno1)), 
+#' col = paste0("rs", 1:ncol(geno1)))
+#' p1 <- c(rep(0, 60), rep(1, 40))
+#' p2 <- rnorm(100)
+#' 
+#' # Testing epistasis with the default number of cores
+#' episcan(geno1 = geno1, 
+#' pheno = p1, 
+#' outfile = "episcan_1geno_cc", 
+#' suffix = ".txt", 
+#' zpthres = 0.9, 
+#' chunksize = 10, 
+#' scale = TRUE)
+#' 
+#' Testing epistasis with a select number of cores
+#' episcan(geno1 = geno1, 
+#' pheno = p1, 
+#' outfile = "episcan_1geno_cc", 
+#' suffix = ".txt", 
+#' zpthres = 0.9, 
+#' chunksize = 10, 
+#' scale = TRUE
+#' ncores = 4)
+#' 
+#' take a look at the result
+#' res <- read.table("episcan_1geno_cc.txt", 
+#' header = TRUE, 
+#' stringsAsFactors = FALSE)
+#' head(res)
+episcan_parallelizable <- function(
+                          geno1,
+                          pheno,
+                          outfile = "episcan",
+                          suffix = ".txt",
+                          zpthres = 1e-6, 
+                          chunksize = 1000, 
+                          scale = TRUE,
+                          ncores=detectCores()
+                          ){
+  if (ncores > detectCores()){
+    stop("too many cores requested")
+  }
+  if (is.null(pheno)){
+    stop("pheno data not provided")
+  }
+  if(!is.vector(pheno)){
+    pheno <- as.vector(unlist(pheno))
+    if(length(pheno) != nrow(geno1)){
+      stop("Your phenotype and genotype data do not have matching lengths. Please check your input phenotype!")
+    }
+  }
+
+  if(is.null(geno1)){
+    stop("There is no given genotype data!")
+  }
+  chunksize <- min(chunksize, ncol(geno1))
+
+  cat(paste0("p-value threshold of Z test for output: ", zpthres), "\n")
+  cat(paste0("set chunksize: ", chunksize), "\n")
+  
+  if(scale){
+    geno1 <- scale(geno1)
+  }
+  gc()
+  print("episcan_parallelized starts:")
+  print(date())
+  chunksize <- checkchunksize(chunksize, ncol(geno1))
+  epiblasterparallel(geno = geno1,
+                     pheno = pheno,
+                     chunk = chunksize,
+                     zpthres = zpthres,
+                     outfile = outfile,
+                     suffix = suffix,
+                     ncores = ncores)
+}
+
+
+
+
 
 #' @title Check chunk size
 #' @description Check the chunk size whether it is over the given number of variables(vaiants) in genotype data. 

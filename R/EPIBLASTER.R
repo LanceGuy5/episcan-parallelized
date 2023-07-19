@@ -1,3 +1,4 @@
+library(parallel)
 
 ##' @description Calculate the difference of correlation coefficents between cases and controls,
 ##' conduct \eqn{Z} test for the differences (values) and choose variant pairs with the significance below the given threshold for output.
@@ -43,6 +44,7 @@ epiblaster1geno <- function(geno,
                             outfile = "NONE",
                             suffix = ".txt",
                             ...){
+  start <- Sys.time()
   zthres <- abs(qnorm(zpthres/2))
   ## output head
   # check whether output file exisit or not; if yes, delete
@@ -88,13 +90,12 @@ epiblaster1geno <- function(geno,
       gc()
     }
   }
-  
-  
- 
   print("epiblaster calculation is over!")
   print(date())
-  
+  sprintf("Total time duration: %s", Sys.time() - start)
 }
+
+
 
 
 
@@ -148,6 +149,7 @@ epiblaster2genos <- function(geno1,
                              outfile = "NONE",
                              suffix = ".txt",
                              ...){
+  start <- Sys.time()
   zthres <- abs(qnorm(zpthres/2))
   ## output head
   # check whether output file exisit or not; if yes, delete
@@ -203,6 +205,131 @@ epiblaster2genos <- function(geno1,
   
   print("epiblaster calculation is over!")
   print(date())
+  sprintf("Total time duration: %s", Sys.time() - start)
+}
+
+
+
+
+
+##' @description Calculate the difference of correlation coefficents between cases and controls,
+##' conduct \eqn{Z} test for the differences (values) and choose variant pairs with the significance below the given threshold for output. Uses parallelization.
+##' @title Parallelized calculation of the difference of correlation coefficients and compute \eqn{Z} test with one genotype input
+##' @export
+##' @param geno is the normalized genotype data. It can be a matrix or a dataframe, or a big.matrix object (from \pkg{bigmemory}. 
+##' The columns contain the information of variables and the rows contain the information of samples. 
+##' @param pheno a vector containing the binary phenotype information (case/control). The values are either 0 (control) or 1 (case). 
+##' @param zpthres is the significance threshold to select variant pairs for output. Default is 1e-6.
+##' @param chunk is the number of variants in each chunk. Default: 1000.
+##' @param outfile is the base of out filename. Default: 'NONE'.
+##' @param suffix is the suffix of out filename. Default: '.txt'.
+##' @return null
+##' @author Beibei Jiang \email{beibei_jiang@@psych.mpg.de} and Benno Pütz \email{Benno Pütz \email{puetz@@psych.mpg.de}
+##' @examples 
+##' # simulate some data
+#' set.seed(123)
+#' geno1 <- matrix(sample(0:2, size = 1000, replace = TRUE, prob = c(0.5, 0.3, 0.2)), ncol = 10)
+#' dimnames(geno1) <- list(row = paste0("IND", 1:nrow(geno1)), col = paste0("rs", 1:ncol(geno1)))
+#' p1 <- c(rep(0, 60), rep(1, 40))
+#' 
+#' # normalized data
+#' geno1 <- scale(geno1)
+#' 
+#' # one genotype with case-control phenotype
+#' epiblaster1geno(geno = geno1, 
+#' pheno = p1,
+#' outfile = "episcan_1geno_cc", 
+#' suffix = ".txt", 
+#' zpthres = 0.9, 
+#' chunk = 10)
+#' 
+#' # take a look at the result
+#' res <- read.table("episcan_1geno_cc.txt", 
+#' header = TRUE, 
+#' stringsAsFactors = FALSE)
+#' head(res)
+epiblasterparallel <- function(geno,
+                               pheno,
+                               chunk = 1000,
+                               zpthres = 10e-06,
+                               outfile = "NONE",
+                               suffix = ".txt",
+                               ncores
+                               ){
+  start <- Sys.time()
+  zthres <- abs(qnorm(zpthres/2))
+  ## output head
+  # check whether output file exisit or not; if yes, delete
+  OUT <- paste0(outfile, suffix)
+  if(file.exists(OUT)) file.remove(OUT)
+  cat(paste("SNP1", "SNP2", "Zscore", "ZP",
+            sep = " "),
+      "\n",
+      file = OUT,
+      append = TRUE)   # why append? file was removed had it been present ...
+  
+  nSNP <- ncol(geno)
+  nsplits <- ceiling(nSNP / chunk)  # number of splits (i.e., of size chunk, possibly incomplete at end)
+  
+  print(paste("Preparing ",nsplits, " chunk loops..."))
+  
+  is.case <- pheno == 1
+  control <- as.matrix(geno[!is.case, ])    # ctrl.data
+  case <- as.matrix(geno[is.case, ])        # case.data
+  rm(is.case)
+  sd_tot <- sqrt(1/(nrow(control)-1) + 1/(nrow(case)-1))
+  gc()
+  
+  # Establishing cluster
+  cl <- makeCluster(ncores-1, type='PSOCK')
+  clusterEvalQ(cl, sink(paste0("C:\\Users\\lance\\Desktop\\data\\log\\", Sys.getpid(), ".txt")))
+  
+  # Giving the cluster access to everything it will need
+  clusterExport(cl, c('getcor',
+                      'ithChunk',
+                      'WriteSnpPairs_sym',
+                      'WriteSnpPairs'))
+  
+  # Turning future code into a process that can be parallelized
+  apply_ztest <- function(i,j,nSNP,chunk,control,zthres){
+    sprintf("REACHED HERE WITH VARIABLES ",i, " AND ", j)
+    tryCatch({
+      ztest <- (getcor(A = as.matrix(case[, ithChunk(as.numeric(i), nSNP, chunk), drop = FALSE]),
+                       B = as.matrix(case[, ithChunk(as.numeric(j), nSNP, chunk), drop = FALSE]),
+                       method = "pearson")
+                -
+                  getcor(A = as.matrix(control[, ithChunk(as.numeric(i), nSNP, chunk), drop = FALSE]),
+                         B = as.matrix(control[, ithChunk(as.numeric(j), nSNP, chunk), drop = FALSE]),
+                         method = "pearson") )  /  sd_tot
+      index <- which(abs(ztest) >= zthres, arr.ind = TRUE)
+      
+      ifelse(i==j,
+             WriteSnpPairs_sym,
+             WriteSnpPairs)(Zmatrix = ztest, indexArr = index,
+                            outfile = OUT)
+      rm(list = c("ztest", "index"))
+      gc()
+    }, err = function(err){
+      cat("Error: ", conditionMessage(err), "\n")
+      cat("Traceback:\n")
+      cat(traceback())
+      cat("Code that triggered the error:\n")
+      cat(conditionCall(err))
+    }, finally = {
+      sink(NULL)
+    })
+  }
+  
+  ############## calculation ##################
+  for ( i in 1:nsplits)
+  {
+    print(paste(i, "chunk loop:", date()))
+    parLapply(cl, c(i:nsplits), apply_ztest, i=i, nSNP=nSNP,chunk=chunk,control=control,zthres=zthres) # Test the list here
+  }
+  stopCluster(cl)
+  print("epiblaster calculation is over!")
+  print(date())
+  sprintf("Total time duration: %s", Sys.time() - start)
 }
 
 

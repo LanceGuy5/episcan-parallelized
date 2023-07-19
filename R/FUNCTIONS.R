@@ -33,11 +33,12 @@ ZtoP <- function(z.score, ...){
 ##' @return index range into variants for chunk \code{idx} (see details)
 ##' @author Benno Pütz \email{Benno Pütz \email{puetz@@psych.mpg.de}
 ithChunk <- function(idx, n, chunk = 1000){
+  print(paste(typeof(idx), ", ", typeof(n), ",", typeof(chunk)))
   start <- (idx-1) * chunk + 1   #
   return(if(idx < 1 || start>n){
     numeric(0)   # this should not be reached
   } else {
-    start:min(idx * chunk, n)   # take cae of "incomplete" chunks
+    start:min(idx * chunk, n)   # take care of "incomplete" chunks
   })
 }
 
@@ -52,7 +53,7 @@ ithChunk <- function(idx, n, chunk = 1000){
 ##' @title Write out epistasis result (normal matrix)
 ##' @export
 ##' @param Zmatrix is the Z score matrix (non-symmetric matrix).
-##' @param indexArr is the index of Zmarix whose z score is over the given \code{zpthres}.
+##' @param indexArr is the index of Z-matrix whose z score is over the given \code{zpthres}.
 ##' @param outfile is the SNP pairs file for the second stage.
 ##' @param ... not used.
 ##' @return null
