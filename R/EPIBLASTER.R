@@ -79,7 +79,6 @@ epiblaster1geno <- function(geno,
                   getcor(A = as.matrix(control[, ithChunk(i, nSNP, chunk), drop = FALSE]),
                          B = as.matrix(control[, ithChunk(j, nSNP, chunk), drop = FALSE]),
                          method = "pearson") )  /  sd_tot
-      
       index <- which(abs(ztest) >= zthres, arr.ind = TRUE)
       
       ifelse(i==j,
@@ -282,8 +281,7 @@ epiblasterparallel <- function(geno,
   
   # Establishing cluster
   cl <- makeCluster(ncores-1, type='PSOCK')
-  clusterEvalQ(cl, sink(paste0("C:\\Users\\lance\\Desktop\\data\\log\\", Sys.getpid(), ".txt")))
-  
+
   # Giving the cluster access to everything it will need
   clusterExport(cl, c('getcor',
                       'ithChunk',
@@ -293,7 +291,6 @@ epiblasterparallel <- function(geno,
   
   # Turning future code into a process that can be parallelized
   apply_ztest <- function(i,j,nSNP,chunk,control,zthres){
-    sprintf("REACHED HERE WITH VARIABLES ",i, " AND ", j)
     tryCatch({
       ztest <- (getcor(A = as.matrix(case[, ithChunk(as.numeric(i), nSNP, chunk), drop = FALSE]),
                        B = as.matrix(case[, ithChunk(as.numeric(j), nSNP, chunk), drop = FALSE]),
@@ -311,20 +308,13 @@ epiblasterparallel <- function(geno,
       rm(list = c("ztest", "index"))
       gc()
     }, err = function(err){
-      cat("Error: ", conditionMessage(err), "\n")
-      cat("Traceback:\n")
-      cat(traceback())
-      cat("Code that triggered the error:\n")
-      cat(conditionCall(err))
     }, finally = {
-      sink(NULL)
     })
   }
   
   ############## calculation ##################
   for ( i in 1:nsplits)
   {
-    print(paste(i, "chunk loop:", date()))
     parLapply(cl, c(i:nsplits), apply_ztest, i=i, nSNP=nSNP,chunk=chunk,control=control,zthres=zthres) # Test the list here
   }
   stopCluster(cl)

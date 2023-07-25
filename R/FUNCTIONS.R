@@ -33,7 +33,6 @@ ZtoP <- function(z.score, ...){
 ##' @return index range into variants for chunk \code{idx} (see details)
 ##' @author Benno Pütz \email{Benno Pütz \email{puetz@@psych.mpg.de}
 ithChunk <- function(idx, n, chunk = 1000){
-  print(paste(typeof(idx), ", ", typeof(n), ",", typeof(chunk)))
   start <- (idx-1) * chunk + 1   #
   return(if(idx < 1 || start>n){
     numeric(0)   # this should not be reached
